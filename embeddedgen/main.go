@@ -80,11 +80,11 @@ const (
 import (
 	"net/http"
 
-	"github.com/pshvedko/embedded/dir"
+	"github.com/pshvedko/embedded"
 )
 
 func Dir() http.FileSystem {
-	return dir.New(
+	return embedded.New(
 		map[string][]byte{
 `
 	mapper = `			%q: %*sb%d[:],
@@ -108,7 +108,7 @@ func (d *dir) gen() (err error) {
 		return
 	}
 	var out *os.File
-	path := filepath.Join(d.name, "dir.go")
+	path := filepath.Join(d.name, "main.go")
 	out, err = os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
 		return

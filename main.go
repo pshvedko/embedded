@@ -1,4 +1,4 @@
-package dir
+package embedded
 
 import (
 	"bytes"

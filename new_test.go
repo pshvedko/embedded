@@ -33,7 +33,8 @@ func TestNew(t *testing.T) {
 }
 
 func ExampleNew() {
-	files := embedded.New(map[string][]byte{"/index.html": []byte(`<!DOCTYPE html>
+	files := embedded.New(map[string][]byte{
+		"/index.html": []byte(`<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">

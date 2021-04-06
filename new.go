@@ -22,13 +22,6 @@ type holder interface {
 
 type folder map[string]holder
 
-func (f folder) keys() (keys []string) {
-	for key := range f {
-		keys = append(keys, key)
-	}
-	return
-}
-
 func (f folder) Open(name string) (http.File, error) {
 	v, ok := f[name]
 	if !ok {
@@ -95,7 +88,7 @@ func (d *dir) Name() string { return d.p }
 
 func (d *dir) Size() int64 { return 0 }
 
-func (d *dir) Readdir(m int) (infos []os.FileInfo, err error) { panic("implement me") }
+func (d *dir) Readdir(int) (infos []os.FileInfo, err error) { panic("implement me") }
 
 func (d *dir) IsDir() bool { return true }
 

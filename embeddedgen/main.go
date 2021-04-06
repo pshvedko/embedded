@@ -1,25 +1,29 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 )
 
-type dir struct {
+type generator struct {
 	root  string
 	name  string
 	files []string
 	max   int
 }
 
-func (d *dir) generate(path string, info os.FileInfo, err0 error) (err error) {
-	if err0 != nil || info.IsDir() {
+func (g *generator) walk(path string, info os.FileInfo, err0 error) (err error) {
+	if err0 != nil {
+		return
+	}
+	if info.IsDir() {
+		if path == g.name {
+			return filepath.SkipDir
+		}
 		return
 	}
 	var in *os.File
@@ -28,21 +32,21 @@ func (d *dir) generate(path string, info os.FileInfo, err0 error) (err error) {
 		return
 	}
 	defer in.Close()
-	n := len(d.files)
-	d.files = append(d.files, strings.TrimPrefix(path, d.root))
-	m := len(d.files[n])
-	if d.max < m {
-		d.max = m
+	n := len(g.files)
+	g.files = append(g.files, strings.TrimPrefix(path, g.root))
+	m := len(g.files[n])
+	if g.max < m {
+		g.max = m
 	}
 	path = fmt.Sprintf("%d.go", n)
-	path = filepath.Join(d.name, path)
+	path = filepath.Join(g.name, path)
 	var out *os.File
 	out, err = os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
 		return
 	}
 	defer out.Close()
-	_, err = fmt.Fprintf(out, "package %s\n\nvar b%d = [...]byte{\n", filepath.Base(d.name), n)
+	_, err = fmt.Fprintf(out, "package %s\n\nvar b%d = [...]byte{\n", filepath.Base(g.name), n)
 	if err != nil {
 		return
 	}
@@ -74,79 +78,61 @@ func (d *dir) generate(path string, info os.FileInfo, err0 error) (err error) {
 	return
 }
 
-const (
-	header = `package %s
-
-import (
-	"net/http"
-
-	"github.com/pshvedko/embedded"
-)
-
-func Dir() http.FileSystem {
-	return embedded.New(
-		map[string][]byte{
-`
-	mapper = `			%q: %*sb%d[:],
-`
-	footer = `		}, %v)
-}
-`
-)
-
-func (d *dir) gen() (err error) {
-	err = os.RemoveAll(d.name)
+func (g *generator) generate() (err error) {
+	err = os.MkdirAll(g.name, 0755)
 	if err != nil {
 		return
 	}
-	err = os.MkdirAll(d.name, 0755)
-	if err != nil {
-		return
-	}
-	err = filepath.Walk(d.root, d.generate)
+	err = filepath.Walk(g.root, g.walk)
 	if err != nil {
 		return
 	}
 	var out *os.File
-	path := filepath.Join(d.name, "main.go")
+	path := filepath.Join(g.name, "main.go")
 	out, err = os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
 		return
 	}
 	defer out.Close()
-	_, err = fmt.Fprintf(out, header, filepath.Base(d.name))
+	_, err = fmt.Fprintf(out, "package %s\n\nimport (\n\t\"net/http\"\n\n\t\"github.com/pshvedko/embedded\"\n)\n\n"+
+		"func Dir() http.FileSystem {\n\treturn embedded.New(\n\t\tmap[string][]byte{\n", filepath.Base(g.name))
 	if err != nil {
 		return
 	}
-	for i, f := range d.files {
-		_, err = fmt.Fprintf(out, mapper, f, d.max-len(f), "", i)
+	for i, f := range g.files {
+		_, err = fmt.Fprintf(out, "\t\t\t%q: %*sb%d[:],\n", f, g.max-len(f), "", i)
 		if err != nil {
 			return
 		}
 	}
-	_, err = fmt.Fprintf(out, footer, time.Now().Unix())
+	_, err = fmt.Fprintf(out, "\t\t}, %v)\n}\n", time.Now().Unix())
 	return
 }
 
-var source string
-
-func init() {
-	flag.StringVar(&source, "source", ".", "path to source dir")
+func generate(root, name string) (err error) {
+	g := generator{root: root, name: name}
+	return g.generate()
 }
 
 func main() {
-	flag.Usage = func() {
-		fmt.Printf("Usage:\n\t%s [options] package\nOptions:\n", os.Args[0])
-		flag.PrintDefaults()
-	}
-	flag.Parse()
-	if flag.NArg() != 1 {
-		flag.Usage()
+	if len(os.Args) != 3 {
+		fmt.Printf("Usage:\n\t%s source package\n", filepath.Base(os.Args[0]))
 		os.Exit(1)
 	}
-	c := dir{root: filepath.Clean(source), name: filepath.Clean(flag.Arg(0))}
-	err := c.gen()
+	r, err := os.Getwd()
 	if err != nil {
-		log.Fatal(err)
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	for i, a := range os.Args[1:] {
+		if !filepath.IsAbs(a) {
+			a = filepath.Join(r, a)
+		}
+		os.Args[1+i] = filepath.Clean(a)
+	}
+	err = generate(os.Args[1], os.Args[2])
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
 	}
 }
